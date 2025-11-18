@@ -149,11 +149,7 @@ export class CommentService {
       console.log(`⏭️  COMMENT GÖNDERİLMEYECEK ISSUE'LAR (${issuesWithoutComment.length})`);
       console.log('═══════════════════════════════════════════════════════\n');
       
-      for (const { issue, reason } of issuesWithoutComment) {
-        console.log(`❌ Issue #${issue.number} - ${issue.title}`);
-        console.log(`   Neden: ${reason}`);
-        console.log('');
-      }
+    
     }
 
     return stats;

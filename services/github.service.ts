@@ -69,7 +69,7 @@ export class GitHubService {
         query($owner: String!, $projectNumber: Int!) {
           user(login: $owner) {
             projectV2(number: $projectNumber) {
-              items(first: 100) {
+              items(first: 100, orderBy: {field: POSITION, direction: DESC}) {
                 nodes {
                   id
                   content {
@@ -98,19 +98,43 @@ export class GitHubService {
                     }
                   }
                 }
+                pageInfo {
+                  hasNextPage
+                  endCursor
+                }
               }
             }
           }
         }
       `;
 
-      const response: any = await freshOctokit.graphql(query, {
-        owner: OWNER,
-        projectNumber: PROJECT_NUMBER,
-      });
+      let allProjectItems: any[] = [];
+      let hasNextPage = true;
+      let cursor: string | null = null;
+      
+      while (hasNextPage && allProjectItems.length < 500) {
+        const paginatedQuery = cursor 
+          ? query.replace('items(first: 100,', `items(first: 100, after: "${cursor}",`)
+          : query;
+          
+        const response: any = await freshOctokit.graphql(paginatedQuery, {
+          owner: OWNER,
+          projectNumber: PROJECT_NUMBER,
+        });
 
-      const projectItems = response?.user?.projectV2?.items?.nodes || [];
-      const item = projectItems.find(
+        const items = response?.user?.projectV2?.items?.nodes || [];
+        allProjectItems = [...allProjectItems, ...items];
+        
+        hasNextPage = response?.user?.projectV2?.items?.pageInfo?.hasNextPage || false;
+        cursor = response?.user?.projectV2?.items?.pageInfo?.endCursor || null;
+        
+        const foundItem = items.find((item: any) => item.content?.number === issueNumber);
+        if (foundItem) {
+          hasNextPage = false;
+        }
+      }
+
+      const item = allProjectItems.find(
         (item: any) => item.content?.number === issueNumber
       );
 
