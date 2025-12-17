@@ -130,7 +130,7 @@ export class CommentService {
             console.log(`   ✓ Comment gönderildi\n`);
           }
           
-          await this.sleep(1000);
+          await this.sleep(300);
         } catch (error) {
           stats.errors++;
           console.error(`   ❌ Hata: ${error}\n`);

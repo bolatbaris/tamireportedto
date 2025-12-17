@@ -5,12 +5,10 @@ const OWNER = 'GTTami';
 const REPO = 'WebApp';
 const PROJECT_NUMBER = 2;
 
-/**
- * GitHub API ile işlem yapmak için servis sınıfı
- */
 export class GitHubService {
   private octokit: Octokit;
   private token: string;
+  private projectDataCache: Map<number, ProjectData> | null = null;
 
   constructor(token: string) {
     this.token = token;
@@ -56,7 +54,11 @@ export class GitHubService {
     }
   }
 
-  async getProjectDataForIssue(issueNumber: number): Promise<ProjectData> {
+  async getAllProjectData(): Promise<Map<number, ProjectData>> {
+    if (this.projectDataCache) {
+      return this.projectDataCache;
+    }
+
     try {
       const freshOctokit = new Octokit({ 
         auth: this.token,
@@ -112,7 +114,7 @@ export class GitHubService {
       let hasNextPage = true;
       let cursor: string | null = null;
       
-      while (hasNextPage && allProjectItems.length < 500) {
+      while (hasNextPage) {
         const paginatedQuery = cursor 
           ? query.replace('items(first: 100,', `items(first: 100, after: "${cursor}",`)
           : query;
@@ -127,57 +129,56 @@ export class GitHubService {
         
         hasNextPage = response?.user?.projectV2?.items?.pageInfo?.hasNextPage || false;
         cursor = response?.user?.projectV2?.items?.pageInfo?.endCursor || null;
-        
-        const foundItem = items.find((item: any) => item.content?.number === issueNumber);
-        if (foundItem) {
-          hasNextPage = false;
+      }
+
+      const projectDataMap = new Map<number, ProjectData>();
+
+      for (const item of allProjectItems) {
+        const issueNumber = item.content?.number;
+        if (!issueNumber) continue;
+
+        const projectData: ProjectData = {};
+        const fieldValues = item.fieldValues?.nodes || [];
+
+        for (const fieldValue of fieldValues) {
+          const fieldName = fieldValue.field?.name?.trim();
+          
+          if (fieldName === 'reportedTo' && fieldValue.text) {
+            projectData.reportedTo = fieldValue.text;
+          } else if (fieldName === 'Status' && fieldValue.name) {
+            projectData.status = fieldValue.name;
+          }
         }
+
+        projectDataMap.set(issueNumber, projectData);
       }
 
-      const item = allProjectItems.find(
-        (item: any) => item.content?.number === issueNumber
-      );
-
-      if (!item) {
-        return {};
-      }
-
-      const projectData: ProjectData = {};
-      const fieldValues = item.fieldValues?.nodes || [];
-
-      for (const fieldValue of fieldValues) {
-        const fieldName = fieldValue.field?.name?.trim();
-        
-        if (fieldName === 'reportedTo' && fieldValue.text) {
-          projectData.reportedTo = fieldValue.text;
-        } else if (fieldName === 'Status' && fieldValue.name) {
-          projectData.status = fieldValue.name;
-        }
-      }
-
-      return projectData;
+      this.projectDataCache = projectDataMap;
+      return projectDataMap;
     } catch (error) {
-      console.error(`Error fetching project data for issue #${issueNumber}:`, error);
-      return {};
+      console.error('Error fetching all project data:', error);
+      return new Map();
     }
   }
 
   async getIssuesWithProjectData(targetAssignees?: string[]): Promise<IssueWithProjectData[]> {
-    const issues = await this.getOpenIssues(targetAssignees);
-    const issuesWithData: IssueWithProjectData[] = [];
+    const [issues, projectDataMap] = await Promise.all([
+      this.getOpenIssues(targetAssignees),
+      this.getAllProjectData()
+    ]);
 
-    for (const issue of issues) {
-      const projectData = await this.getProjectDataForIssue(issue.number);
+    const issuesWithData: IssueWithProjectData[] = issues.map(issue => {
+      const projectData = projectDataMap.get(issue.number) || {};
       
       if (issue.assignees && issue.assignees.length > 0) {
         projectData.assignee = issue.assignees[0].login;
       }
 
-      issuesWithData.push({
+      return {
         ...issue,
         projectData,
-      });
-    }
+      };
+    });
 
     return issuesWithData;
   }
@@ -203,6 +204,4 @@ export class GitHubService {
       throw error;
     }
   }
-
 }
-
