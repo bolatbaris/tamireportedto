@@ -97,6 +97,14 @@ export class GitHubService {
                           }
                         }
                       }
+                      ... on ProjectV2ItemFieldNumberValue {
+                        number
+                        field {
+                          ... on ProjectV2Field {
+                            name
+                          }
+                        }
+                      }
                     }
                   }
                 }
@@ -147,6 +155,8 @@ export class GitHubService {
             projectData.reportedTo = fieldValue.text;
           } else if (fieldName === 'Status' && fieldValue.name) {
             projectData.status = fieldValue.name;
+          } else if (fieldName === 'Story Point' && fieldValue.number !== undefined) {
+            projectData.storyPoints = fieldValue.number;
           }
         }
 
@@ -201,6 +211,34 @@ export class GitHubService {
       });
     } catch (error) {
       console.error(`❌ Error adding comment to issue #${issueNumber}:`, error);
+      throw error;
+    }
+  }
+
+  async createDailyGist(content: string, username: string): Promise<string> {
+    try {
+      const today = new Date();
+      const day = today.getDate().toString().padStart(2, '0');
+      const month = today.toLocaleString('tr-TR', { month: 'long' });
+      const year = today.getFullYear();
+      
+      const filename = `${day}-${month}-${year}.md`;
+      const description = `${username} - Günlük Rapor - ${day} ${month} ${year}`;
+
+      const response = await this.octokit.rest.gists.create({
+        files: {
+          [filename]: {
+            content: content,
+          },
+        },
+        description: description,
+        public: false,
+      });
+
+      console.log(`✅ Gist created: ${response.data.html_url}`);
+      return response.data.html_url || '';
+    } catch (error) {
+      console.error('❌ Error creating gist:', error);
       throw error;
     }
   }

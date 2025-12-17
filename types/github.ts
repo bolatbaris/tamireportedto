@@ -35,6 +35,7 @@ export interface ProjectData {
   reportedTo?: string;
   status?: string;
   assignee?: string;
+  storyPoints?: number;
 }
 
 export interface IssueWithProjectData extends GitHubIssue {
